@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 # global requirements
+import json
 import logging
 
 # local requirements
@@ -32,7 +33,7 @@ class LowLevelKP:
                                                    secure)
 
 
-    # TODO -- update
+    # update
     def update(self, sparqlUpdate):
 
         """This method is used to perform a SPARQL update"""
@@ -41,8 +42,20 @@ class LowLevelKP:
         self.logger.debug("Performing a SPARQL update")
 
         # perform the update request
-        text = self.connectionManager.updateRequest(sparqlUpdate)
-        
+        status, results = self.connectionManager.updateRequest(sparqlUpdate)                
+
+        # return
+        if int(status) == 200:
+            jresults = json.loads(results)
+            if "updated" in jresults:
+                if "status" in jresults["updated"]:
+                    return jresults["updated"]["status"], jresults["updated"]["body"]
+                else:
+                    return False, results
+            else:
+                return False, results
+        else:
+            return False, results
 
 
     # query
@@ -54,7 +67,17 @@ class LowLevelKP:
         self.logger.debug("Performing a SPARQL query")
         
         # perform the query request
-        text = self.connectionManager.queryRequest(sparqlQuery)
+        status, results = self.connectionManager.queryRequest(sparqlQuery)
+
+        # return 
+        if int(status) == 200:
+            jresults = json.loads(results)
+            if "error" in jresults:
+                return False, jresults["error"]["message"]
+            else:
+                return True, jresults
+        else:
+            return False, results
         
 
     # TODO -- subscribe

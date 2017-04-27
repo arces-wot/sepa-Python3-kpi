@@ -56,7 +56,7 @@ class ConnectionHandler:
 
             # perform the request
             r = requests.post(self.queryURI, headers = headers, data = payload)
-            return r.text
+            return r.status_code, r.text
 
 
     # do HTTP update request
@@ -75,4 +75,4 @@ class ConnectionHandler:
 
             # perform the request
             r = requests.post(self.queryURI, headers = headers, data = payload)
-            return r.text
+            return r.status_code, r.text
