@@ -5,6 +5,7 @@ import json
 import logging
 
 # local requirements
+from Exceptions import *
 from ConnectionHandler import *
 
 # class KP

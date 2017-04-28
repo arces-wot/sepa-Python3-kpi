@@ -8,6 +8,7 @@ import json
 import sys
 
 # local requirements
+from Exceptions import *
 
 # class ConnectionHandler
 class ConnectionHandler:
@@ -59,18 +60,13 @@ class ConnectionHandler:
         # if security is needed
         if self.secure:
 
-            # initialization
-            needRefresh = False
-
             # if the client is not yet registered, then register!
             if not self.clientSecret:
-                if not(self.register()):
-                    return False, "Registration failed!"
+                self.register()
                     
             # if a token is not present, request it!
             if not(self.token):
-                if not(self.requestToken()):
-                    return False, "Token not obtained!"
+                self.requestToken()
 
             # perform the request
             self.logger.debug("Performing a secure SPARQL request")
@@ -85,10 +81,10 @@ class ConnectionHandler:
                            "Authorization":self.token}
                 r = requests.post(self.updateURIsecure, headers = headers, data = sparql, verify = False)
 
-                # check for errors on token validity
-                if r.status_code == 401:
-                    self.token = None                
-                    return False, "Token expired"
+            # check for errors on token validity
+            if r.status_code == 401:
+                self.token = None                
+                raise TokenExpiredException
 
             # return
             return r.status_code, r.text
@@ -122,9 +118,8 @@ class ConnectionHandler:
         if r.status_code == 201:
             jresponse = json.loads(r.text)
             self.clientSecret = "Basic " + base64.b64encode(jresponse["client_id"] + ":" + jresponse["client_secret"])
-            return True            
         else:
-            return False
+            raise RegistrationFailedException()
 
 
     # do request token
@@ -143,6 +138,5 @@ class ConnectionHandler:
         if r.status_code == 201:
             jresponse = json.loads(r.text)
             self.token = "Bearer " + jresponse["access_token"]
-            return True
         else:
-            return False
+            raise TokenRequestFailedException()
