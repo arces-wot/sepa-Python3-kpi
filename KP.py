@@ -14,7 +14,7 @@ class LowLevelKP:
     """This is the Low-level class used to develop a KP"""
 
     # constructor
-    def __init__(self, host, updatePath, queryPath, registrationPath, tokenReqPath, # paths
+    def __init__(self, host, path, registrationPath, tokenReqPath, # paths
                  httpPort, httpsPort, wsPort, wssPort, # ports                 
                  secure, clientName): # security    
         
@@ -29,7 +29,7 @@ class LowLevelKP:
         self.subscriptions = {}
 
         # initialize handler
-        self.connectionManager = ConnectionHandler(host, updatePath, queryPath, registrationPath, tokenReqPath, # paths
+        self.connectionManager = ConnectionHandler(host, path, registrationPath, tokenReqPath, # paths
                                                    httpPort, httpsPort, wsPort, wssPort, # ports
                                                    secure, clientName) # security
 
@@ -51,10 +51,6 @@ class LowLevelKP:
             if "updated" in jresults:
                 if "status" in jresults["updated"]:
                     return jresults["updated"]["status"], jresults["updated"]["body"]
-                else:
-                    return False, results
-            else:
-                return False, results
         else:
             return False, results
 
@@ -81,9 +77,14 @@ class LowLevelKP:
             return False, results
         
 
-    # TODO -- subscribe
+    # TODO -- susbscribe
     def subscribe(self):
-        pass
+
+        if self.secure:
+            pass
+
+        else:
+            pass
         
     
     # TODO -- unsubscribe

@@ -16,7 +16,7 @@ class ConnectionHandler:
     """This is the ConnectionHandler class"""
 
     # constructor
-    def __init__(self, host, updatePath, queryPath, registrationPath, tokenReqPath, # paths
+    def __init__(self, host, path, registrationPath, tokenReqPath, # paths
                  httpPort, httpsPort, wsPort, wssPort, # ports
                  secure, clientName): # security
 
@@ -31,20 +31,17 @@ class ConnectionHandler:
         self.wsPort = str(wsPort)
         self.wssPort = str(wssPort)
         self.host = host
-        self.updatePath = updatePath
-        self.queryPath = queryPath
+        self.path = path
         self.registrationPath = registrationPath
         self.tokenReqPath = tokenReqPath
         self.secure = secure
         self.clientName = clientName
 
         # determine complete URIs
-        self.queryURI = "http://" + self.host + ":" + self.httpPort + self.queryPath
-        self.queryURIsecure = "https://" + self.host + ":" + self.httpsPort + self.queryPath
-        self.updateURI = "http://" + self.host + ":" + self.httpPort + self.updatePath
-        self.updateURIsecure = "https://" + self.host + ":" + self.httpsPort + self.updatePath
+        self.queryUpdateURI = "http://" + self.host + ":" + self.httpPort + self.path
+        self.queryUpdateURIsecure = "https://" + self.host + ":" + self.httpsPort + self.path
+        self.subscribeURI = "ws://" + self.host + ":" + self.wsPort + self.path
         self.registerURI = "https://" + self.host + ":" + self.httpsPort + self.registrationPath
-        print self.registerURI
         self.tokenReqURI = "https://" + self.host + ":" + self.httpsPort + self.tokenReqPath
 
         # security data
@@ -74,12 +71,11 @@ class ConnectionHandler:
                 headers = {"Content-Type":"application/sparql-query", 
                            "Accept":"application/json",
                            "Authorization":self.token}
-                r = requests.post(self.queryURIsecure, headers = headers, data = sparql, verify = False)
             else:
                 headers = {"Content-Type":"application/sparql-update", 
                            "Accept":"application/json",
                            "Authorization":self.token}
-                r = requests.post(self.updateURIsecure, headers = headers, data = sparql, verify = False)
+            r = requests.post(self.queryUpdateURIsecure, headers = headers, data = sparql, verify = False)
 
             # check for errors on token validity
             if r.status_code == 401:
@@ -96,10 +92,9 @@ class ConnectionHandler:
             self.logger.debug("Performing a non-secure SPARQL request")
             if isQuery:
                 headers = {"Content-Type":"application/sparql-query", "Accept":"application/json"}
-                r = requests.post(self.queryURI, headers = headers, data = sparql)
             else:
                 headers = {"Content-Type":"application/sparql-update", "Accept":"application/json"}
-                r = requests.post(self.updateURI, headers = headers, data = sparql)
+            r = requests.post(self.queryUpdateURI, headers = headers, data = sparql)
             return r.status_code, r.text
 
 
@@ -117,7 +112,9 @@ class ConnectionHandler:
         r = requests.post(self.registerURI, headers = headers, data = payload, verify = False)        
         if r.status_code == 201:
             jresponse = json.loads(r.text)
-            self.clientSecret = "Basic " + base64.b64encode(jresponse["client_id"] + ":" + jresponse["client_secret"])
+            cred = base64.b64encode(bytes(jresponse["client_id"] + ":" + jresponse["client_secret"], "utf-8"))
+            self.clientSecret = "Basic " + cred.decode("utf-8")
+            print(self.clientSecret)
         else:
             raise RegistrationFailedException()
 
@@ -132,6 +129,7 @@ class ConnectionHandler:
         headers = {"Content-Type":"application/x-www-form-urlencoded", 
                    "Accept":"application/json",
                    "Authorization": self.clientSecret}    
+        print(headers)
 
         # perform the request
         r = requests.post(self.tokenReqURI, headers = headers, verify = False)        
@@ -139,4 +137,6 @@ class ConnectionHandler:
             jresponse = json.loads(r.text)
             self.token = "Bearer " + jresponse["access_token"]
         else:
+            print(r.status_code)
+            print(r.text)
             raise TokenRequestFailedException()
