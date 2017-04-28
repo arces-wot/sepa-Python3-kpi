@@ -51,13 +51,16 @@ class ConnectionHandler:
         self.clientSecret = None
 
 
-    # do HTTP query request
-    def queryRequest(self, sparqlQuery):
+    # do HTTP request
+    def request(self, sparql, isQuery):
 
-        """Method to issue a SPARQL query over HTTP(S)"""
+        """Method to issue a SPARQL request over HTTP(S)"""
         
         # if security is needed
         if self.secure:
+
+            # initialization
+            needRefresh = False
 
             # if the client is not yet registered, then register!
             if not self.clientSecret:
@@ -69,65 +72,38 @@ class ConnectionHandler:
                 if not(self.requestToken()):
                     return False, "Token not obtained!"
 
-            # define headers
-            tokenSecret = "Bearer " + self.token
-            headers = {"Content-Type":"application/sparql-query", 
-                       "Accept":"application/json",
-                       "Authorization":tokenSecret}
-
             # perform the request
-            self.logger.debug("Performing a secure SPARQL query")
-            r = requests.post(self.queryURI, headers = headers, data = sparqlQuery)
+            self.logger.debug("Performing a secure SPARQL request")
+            if isQuery:
+                headers = {"Content-Type":"application/sparql-query", 
+                           "Accept":"application/json",
+                           "Authorization":self.token}
+                r = requests.post(self.queryURIsecure, headers = headers, data = sparql, verify = False)
+            else:
+                headers = {"Content-Type":"application/sparql-update", 
+                           "Accept":"application/json",
+                           "Authorization":self.token}
+                r = requests.post(self.updateURIsecure, headers = headers, data = sparql, verify = False)
+
+                # check for errors on token validity
+                if r.status_code == 401:
+                    self.token = None                
+                    return False, "Token expired"
+
+            # return
             return r.status_code, r.text
 
         # insecure connection 
         else:
 
-            # define headers
-            headers = {"Content-Type":"application/sparql-query", "Accept":"application/json"}
-
             # perform the request
-            self.logger.debug("Performing a non-secure SPARQL query")
-            r = requests.post(self.queryURI, headers = headers, data = sparqlQuery)
-            return r.status_code, r.text
-
-
-    # do HTTP update request
-    def updateRequest(self, sparqlUpdate):
-
-        """Method to issue a SPARQL update over HTTP(S)"""
-        
-        if self.secure:          
-
-            # if the client is not yet registered, then register!
-            if not self.clientSecret:
-                if not(self.register()):
-                    return False, "Registration failed!"
-                    
-            # if a token is not present, request it!
-            if not(self.token):
-                if not(self.requestToken()):
-                    return False, "Token not obtained!"
-
-            # define headers
-            tokenSecret = "Bearer " + self.token
-            headers = {"Content-Type":"application/sparql-update", 
-                       "Accept":"application/json",
-                       "Authorization":tokenSecret}
-
-            # perform the request
-            self.logger.debug("Performing a secure SPARQL update")
-            r = requests.post(self.queryURI, headers = headers, data = sparqlUpdate)
-            return r.status_code, r.text
-
-        else:
-
-            # define headers
-            headers = {"Content-Type":"application/sparql-update", "Accept":"application/json"}
-
-            # perform the request
-            self.logger.debug("Performing a non-secure SPARQL update")
-            r = requests.post(self.queryURI, headers = headers, data = sparqlUpdate)
+            self.logger.debug("Performing a non-secure SPARQL request")
+            if isQuery:
+                headers = {"Content-Type":"application/sparql-query", "Accept":"application/json"}
+                r = requests.post(self.queryURI, headers = headers, data = sparql)
+            else:
+                headers = {"Content-Type":"application/sparql-update", "Accept":"application/json"}
+                r = requests.post(self.updateURI, headers = headers, data = sparql)
             return r.status_code, r.text
 
 
@@ -166,7 +142,7 @@ class ConnectionHandler:
         r = requests.post(self.tokenReqURI, headers = headers, verify = False)        
         if r.status_code == 201:
             jresponse = json.loads(r.text)
-            self.token = jresponse["access_token"]
+            self.token = "Bearer " + jresponse["access_token"]
             return True
         else:
             return False

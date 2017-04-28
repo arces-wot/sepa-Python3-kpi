@@ -42,7 +42,7 @@ class LowLevelKP:
         self.logger.debug("Performing a SPARQL update")
 
         # perform the update request
-        status, results = self.connectionManager.updateRequest(sparqlUpdate)                
+        status, results = self.connectionManager.request(sparqlUpdate, False)                
 
         # return
         if int(status) == 200:
@@ -67,7 +67,7 @@ class LowLevelKP:
         self.logger.debug("Performing a SPARQL query")
         
         # perform the query request
-        status, results = self.connectionManager.queryRequest(sparqlQuery)
+        status, results = self.connectionManager.request(sparqlQuery, True)
 
         # return 
         if int(status) == 200:
