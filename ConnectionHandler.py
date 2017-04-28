@@ -3,6 +3,9 @@
 # global requirements
 import requests
 import logging
+import base64
+import json
+import sys
 
 # local requirements
 
@@ -14,12 +17,12 @@ class ConnectionHandler:
     # constructor
     def __init__(self, host, updatePath, queryPath, registrationPath, tokenReqPath, # paths
                  httpPort, httpsPort, wsPort, wssPort, # ports
-                 secure): # security
+                 secure, clientName): # security
 
         """Constructor of the ConnectionHandler class"""
 
         # logger configuration
-        logger = logging.getLogger("sepaLogger")
+        self.logger = logging.getLogger("sepaLogger")
 
         # store parameters as class attributes
         self.httpPort = str(httpPort)
@@ -32,12 +35,20 @@ class ConnectionHandler:
         self.registrationPath = registrationPath
         self.tokenReqPath = tokenReqPath
         self.secure = secure
+        self.clientName = clientName
 
         # determine complete URIs
         self.queryURI = "http://" + self.host + ":" + self.httpPort + self.queryPath
         self.queryURIsecure = "https://" + self.host + ":" + self.httpsPort + self.queryPath
         self.updateURI = "http://" + self.host + ":" + self.httpPort + self.updatePath
         self.updateURIsecure = "https://" + self.host + ":" + self.httpsPort + self.updatePath
+        self.registerURI = "https://" + self.host + ":" + self.httpsPort + self.registrationPath
+        print self.registerURI
+        self.tokenReqURI = "https://" + self.host + ":" + self.httpsPort + self.tokenReqPath
+
+        # security data
+        self.token = None
+        self.clientSecret = None
 
 
     # do HTTP query request
@@ -45,17 +56,39 @@ class ConnectionHandler:
 
         """Method to issue a SPARQL query over HTTP(S)"""
         
+        # if security is needed
         if self.secure:
-            pass
 
-        else:
+            # if the client is not yet registered, then register!
+            if not self.clientSecret:
+                if not(self.register()):
+                    return False, "Registration failed!"
+                    
+            # if a token is not present, request it!
+            if not(self.token):
+                if not(self.requestToken()):
+                    return False, "Token not obtained!"
 
-            # define headers and payload
-            headers = {"Content-Type":"application/sparql-query", "Accept":"application/json"}
-            payload = sparqlQuery
+            # define headers
+            tokenSecret = "Bearer " + self.token
+            headers = {"Content-Type":"application/sparql-query", 
+                       "Accept":"application/json",
+                       "Authorization":tokenSecret}
 
             # perform the request
-            r = requests.post(self.queryURI, headers = headers, data = payload)
+            self.logger.debug("Performing a secure SPARQL query")
+            r = requests.post(self.queryURI, headers = headers, data = sparqlQuery)
+            return r.status_code, r.text
+
+        # insecure connection 
+        else:
+
+            # define headers
+            headers = {"Content-Type":"application/sparql-query", "Accept":"application/json"}
+
+            # perform the request
+            self.logger.debug("Performing a non-secure SPARQL query")
+            r = requests.post(self.queryURI, headers = headers, data = sparqlQuery)
             return r.status_code, r.text
 
 
@@ -64,15 +97,76 @@ class ConnectionHandler:
 
         """Method to issue a SPARQL update over HTTP(S)"""
         
-        if self.secure:
-            pass
+        if self.secure:          
+
+            # if the client is not yet registered, then register!
+            if not self.clientSecret:
+                if not(self.register()):
+                    return False, "Registration failed!"
+                    
+            # if a token is not present, request it!
+            if not(self.token):
+                if not(self.requestToken()):
+                    return False, "Token not obtained!"
+
+            # define headers
+            tokenSecret = "Bearer " + self.token
+            headers = {"Content-Type":"application/sparql-update", 
+                       "Accept":"application/json",
+                       "Authorization":tokenSecret}
+
+            # perform the request
+            self.logger.debug("Performing a secure SPARQL update")
+            r = requests.post(self.queryURI, headers = headers, data = sparqlUpdate)
+            return r.status_code, r.text
 
         else:
 
-            # define headers and payload
+            # define headers
             headers = {"Content-Type":"application/sparql-update", "Accept":"application/json"}
-            payload = sparqlUpdate
 
             # perform the request
-            r = requests.post(self.queryURI, headers = headers, data = payload)
+            self.logger.debug("Performing a non-secure SPARQL update")
+            r = requests.post(self.queryURI, headers = headers, data = sparqlUpdate)
             return r.status_code, r.text
+
+
+    # do register
+    def register(self):
+
+        # debug print
+        self.logger.debug("Registering client " + self.clientName)
+        
+        # define headers and payload
+        headers = {"Content-Type":"application/json", "Accept":"application/json"}
+        payload = '{"client_identity":' + self.clientName + ', "grant_types":["client_credentials"]}'
+
+        # perform the request
+        r = requests.post(self.registerURI, headers = headers, data = payload, verify = False)        
+        if r.status_code == 201:
+            jresponse = json.loads(r.text)
+            self.clientSecret = "Basic " + base64.b64encode(jresponse["client_id"] + ":" + jresponse["client_secret"])
+            return True            
+        else:
+            return False
+
+
+    # do request token
+    def requestToken(self):
+
+        # debug print
+        self.logger.debug("Requesting token")
+        
+        # define headers and payload        
+        headers = {"Content-Type":"application/x-www-form-urlencoded", 
+                   "Accept":"application/json",
+                   "Authorization": self.clientSecret}    
+
+        # perform the request
+        r = requests.post(self.tokenReqURI, headers = headers, verify = False)        
+        if r.status_code == 201:
+            jresponse = json.loads(r.text)
+            self.token = jresponse["access_token"]
+            return True
+        else:
+            return False

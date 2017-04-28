@@ -15,7 +15,7 @@ class LowLevelKP:
     # constructor
     def __init__(self, host, updatePath, queryPath, registrationPath, tokenReqPath, # paths
                  httpPort, httpsPort, wsPort, wssPort, # ports                 
-                 secure): # security    
+                 secure, clientName): # security    
         
         """Constructor for the Low-level KP class"""
 
@@ -30,7 +30,7 @@ class LowLevelKP:
         # initialize handler
         self.connectionManager = ConnectionHandler(host, updatePath, queryPath, registrationPath, tokenReqPath, # paths
                                                    httpPort, httpsPort, wsPort, wssPort, # ports
-                                                   secure)
+                                                   secure, clientName) # security
 
 
     # update
