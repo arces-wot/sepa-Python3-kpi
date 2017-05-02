@@ -77,16 +77,23 @@ class LowLevelKP:
             return False, results
         
 
-    # TODO -- susbscribe
-    def subscribe(self):
+    # susbscribe
+    def subscribe(self, sparql, handler):
 
-        if self.secure:
-            pass
-
-        else:
-            pass
+        # debug print
+        self.logger.debug("=== KP::subscribe invoked ===")
+      
+        # start the subscription and return the ID
+        subid = self.connectionManager.openWebsocket(sparql, handler)
+        return subid
         
     
-    # TODO -- unsubscribe
-    def unsubsribe(self):
-        pass
+    # unsubscribe
+    def unsubscribe(self, subid):
+
+        # debug print
+        self.logger.debug("=== KP::unsubscribe invoked ===")
+
+        # close the subscription, given the id
+        self.connectionManager.closeWebsocket(subid)
+

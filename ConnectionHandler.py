@@ -1,9 +1,13 @@
 #!/usr/bin/python3
 
 # global requirements
+import threading
+import websocket
 import requests
+import asyncio
 import logging
 import base64
+import time
 import json
 import sys
 
@@ -47,6 +51,9 @@ class ConnectionHandler:
         # security data
         self.token = None
         self.clientSecret = None
+
+        # open subscriptions
+        self.websockets = {}
 
 
     # do HTTP request
@@ -140,3 +147,102 @@ class ConnectionHandler:
             print(r.status_code)
             print(r.text)
             raise TokenRequestFailedException()
+
+
+    # do open websocket
+    def openWebsocket(self, sparql, handler):                         
+
+        # debug
+        self.logger.debug("=== ConnectionHandler::openWebsocket invoked ===")
+
+        # initialization
+        handler = handler
+        subid = None
+
+        # on_message callback
+        def on_message(ws, message):
+
+            # debug
+            self.logger.debug("=== ConnectionHandler::on_message invoked ===")
+            self.logger.debug(message)
+
+            # process message
+            jmessage = json.loads(message)
+            if "subscribed" in jmessage:
+
+                # get the subid
+                nonlocal subid
+                subid = jmessage["subscribed"]
+                self.logger.debug("SUBID = " + subid)
+
+                # save the subscription id and the thread
+                self.websockets[subid] = ws
+
+            elif "ping" in jmessage:                
+                pass # we ignore ping
+
+            else:
+
+                # debug print
+                self.logger.debug("Received: " + message)
+
+                # invoke the handler
+                handler.handle()
+
+
+        # on_error callback
+        def on_error(ws, error):
+
+            # debug
+            self.logger.debug("=== ConnectionHandler::on_error invoked ===")
+
+
+        # on_close callback
+        def on_close(ws):
+
+            # debug
+            self.logger.debug("=== ConnectionHandler::on_close invoked ===")
+
+            # destroy the websocket dictionary
+            del self.websockets[subid]
+
+
+        # on_open callback
+        def on_open(ws):           
+
+            # debug
+            self.logger.debug("=== ConnectionHandler::on_open invoked ===")
+
+            # send subscription request
+            ws.send("subscribe=" + sparql)
+
+
+        # configuring the websocket
+        ws = websocket.WebSocketApp(self.subscribeURI,
+                                    on_message = on_message,
+                                    on_error = on_error,
+                                    on_close = on_close,
+                                    on_open = on_open)
+
+        # starting the websocket thread
+        wst = threading.Thread(target=ws.run_forever)
+        wst.daemon = True
+        wst.start()
+
+        # return
+        while not subid:
+            self.logger.debug("Waiting for subscription ID")
+            time.sleep(0.1)            
+        return subid
+
+
+    def closeWebsocket(self, subid):
+
+        # debug
+        self.logger.debug("=== ConnectionHandler::closeWebSocket invoked ===")
+
+        # retrieve the subscription, close it and delete it
+        self.websockets[subid].close()
+        del self.websockets[subid]
+        
+        
