@@ -10,6 +10,7 @@ import base64
 import time
 import json
 import sys
+import ssl
 
 # local requirements
 from Exceptions import *
@@ -28,6 +29,7 @@ class ConnectionHandler:
 
         # logger configuration
         self.logger = logging.getLogger("sepaLogger")
+        self.logger.debug("=== ConnectionHandler::__init__ invoked ===")
 
         # store parameters as class attributes
         self.httpPort = str(httpPort)
@@ -45,6 +47,7 @@ class ConnectionHandler:
         self.queryUpdateURI = "http://" + self.host + ":" + self.httpPort + self.path
         self.queryUpdateURIsecure = "https://" + self.host + ":" + self.httpsPort + self.path
         self.subscribeURI = "ws://" + self.host + ":" + self.wsPort + self.path
+        self.subscribeURIsecure = "wss://" + self.host + ":" + self.wssPort + self.path
         self.registerURI = "https://" + self.host + ":" + self.httpsPort + self.registrationPath
         self.tokenReqURI = "https://" + self.host + ":" + self.httpsPort + self.tokenReqPath
 
@@ -60,6 +63,9 @@ class ConnectionHandler:
     def request(self, sparql, isQuery):
 
         """Method to issue a SPARQL request over HTTP(S)"""
+
+        # debug
+        self.logger.debug("=== ConnectionHandler::request invoked ===")
         
         # if security is needed
         if self.secure:
@@ -77,11 +83,11 @@ class ConnectionHandler:
             if isQuery:
                 headers = {"Content-Type":"application/sparql-query", 
                            "Accept":"application/json",
-                           "Authorization":self.token}
+                           "Authorization": "Bearer " + self.token}
             else:
                 headers = {"Content-Type":"application/sparql-update", 
                            "Accept":"application/json",
-                           "Authorization":self.token}
+                           "Authorization": "Bearer " + self.token}
             r = requests.post(self.queryUpdateURIsecure, headers = headers, data = sparql, verify = False)
 
             # check for errors on token validity
@@ -109,7 +115,7 @@ class ConnectionHandler:
     def register(self):
 
         # debug print
-        self.logger.debug("Registering client " + self.clientName)
+        self.logger.debug("=== ConnectionHandler::register invoked ===")
         
         # define headers and payload
         headers = {"Content-Type":"application/json", "Accept":"application/json"}
@@ -130,7 +136,7 @@ class ConnectionHandler:
     def requestToken(self):
 
         # debug print
-        self.logger.debug("Requesting token")
+        self.logger.debug("=== ConnectionHandler::requestToken invoked ===")
         
         # define headers and payload        
         headers = {"Content-Type":"application/x-www-form-urlencoded", 
@@ -142,7 +148,7 @@ class ConnectionHandler:
         r = requests.post(self.tokenReqURI, headers = headers, verify = False)        
         if r.status_code == 201:
             jresponse = json.loads(r.text)
-            self.token = "Bearer " + jresponse["access_token"]
+            self.token = jresponse["access_token"]
         else:
             print(r.status_code)
             print(r.text)
@@ -150,10 +156,25 @@ class ConnectionHandler:
 
 
     # do open websocket
-    def openWebsocket(self, sparql, handler):                         
+    def openWebsocket(self, sparql, alias, handler):                         
 
         # debug
         self.logger.debug("=== ConnectionHandler::openWebsocket invoked ===")
+
+        # secure?
+        if self.secure:
+
+            # if the client is not yet registered, then register!
+            if not self.clientSecret:
+                self.register()
+                    
+            # if a token is not present, request it!
+            if not(self.token):
+                self.requestToken()
+
+            print(")================================================================")
+            print(self.token)
+            print(")================================================================")
 
         # initialization
         handler = handler
@@ -213,26 +234,48 @@ class ConnectionHandler:
             # debug
             self.logger.debug("=== ConnectionHandler::on_open invoked ===")
 
+            # composing message
+            msg = {}
+            msg["subscribe"] = sparql
+            msg["alias"] = alias
+            if self.secure:
+                msg["authorization"] = self.token
+
             # send subscription request
-            ws.send("subscribe=" + sparql)
+            ws.send(json.dumps(msg))
+            self.logger.debug(msg)
 
 
         # configuring the websocket
-        ws = websocket.WebSocketApp(self.subscribeURI,
-                                    on_message = on_message,
-                                    on_error = on_error,
-                                    on_close = on_close,
-                                    on_open = on_open)
+        if self.secure:
+            print(self.subscribeURIsecure)
+            self.logger.debug("****** OPENING SECURE WSS ********")
+            ws = websocket.WebSocketApp(self.subscribeURIsecure,
+                                        on_message = on_message,
+                                        on_error = on_error,
+                                        on_close = on_close,
+                                        on_open = on_open)                                        
+        else:
+            print(self.subscribeURI)
+            self.logger.debug("****** OPENING WS ********")
+            ws = websocket.WebSocketApp(self.subscribeURI,
+                                        on_message = on_message,
+                                        on_error = on_error,
+                                        on_close = on_close,
+                                        on_open = on_open)
 
         # starting the websocket thread
-        wst = threading.Thread(target=ws.run_forever)
+        if self.secure:
+            wst = threading.Thread(target=ws.run_forever, kwargs=dict(sslopt={"cert_reqs": ssl.CERT_NONE}))
+        else:
+            wst = threading.Thread(target=ws.run_forever)
         wst.daemon = True
         wst.start()
 
         # return
         while not subid:
             self.logger.debug("Waiting for subscription ID")
-            time.sleep(0.1)            
+            time.sleep(1)            
         return subid
 
 

@@ -23,7 +23,7 @@ class LowLevelKP:
         # logger configuration
         self.logger = logging.getLogger("sepaLogger")
         logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
-        self.logger.debug("Initializing KP")
+        self.logger.debug("=== KP::__init__ invoked ===")
 
         # initialize data structures
         self.subscriptions = {}
@@ -40,7 +40,7 @@ class LowLevelKP:
         """This method is used to perform a SPARQL update"""
         
         # debug print
-        self.logger.debug("Performing a SPARQL update")
+        self.logger.debug("=== KP::update invoked ===")
 
         # perform the update request
         status, results = self.connectionManager.request(sparqlUpdate, False)                
@@ -49,8 +49,10 @@ class LowLevelKP:
         if int(status) == 200:
             jresults = json.loads(results)
             if "updated" in jresults:
-                if "status" in jresults["updated"]:
-                    return jresults["updated"]["status"], jresults["updated"]["body"]
+                if "message" in jresults["updated"]:
+                    if "status" in jresults["updated"]["message"]:
+                        innerMessage = json.loads(jresults["updated"]["message"])
+                        return innerMessage["status"], innerMessage["body"]
         else:
             return False, results
 
@@ -61,7 +63,7 @@ class LowLevelKP:
         """This method is used to perform a SPARQL query"""
 
         # debug print
-        self.logger.debug("Performing a SPARQL query")
+        self.logger.debug("=== KP::query invoked ===")
         
         # perform the query request
         status, results = self.connectionManager.request(sparqlQuery, True)
@@ -78,13 +80,13 @@ class LowLevelKP:
         
 
     # susbscribe
-    def subscribe(self, sparql, handler):
+    def subscribe(self, sparql, alias, handler):
 
         # debug print
         self.logger.debug("=== KP::subscribe invoked ===")
       
         # start the subscription and return the ID
-        subid = self.connectionManager.openWebsocket(sparql, handler)
+        subid = self.connectionManager.openWebsocket(sparql, alias, handler)
         return subid
         
     
